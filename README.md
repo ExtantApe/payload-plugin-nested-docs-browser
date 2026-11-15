@@ -77,6 +77,43 @@ Or over HTTP: `GET /api/nested-docs-browser/<collection>?path=…`, `…/groups`
 
 Names, everyday names and images come from `describe`, so return only what's fine to show. It suits public reference data, such as a taxonomy. The cache holds at most 500 entries and never keeps a miss.
 
+## Breadcrumbs
+
+A deep tree makes a long trail. You can fold the levels people don't need into one **…** button, or leave them out. Nothing leaves the data: the button lists every hidden level as a link, and the structured data keeps the whole path.
+
+Set `levelField` so each ancestor carries its kind of level (for a taxonomy, its rank):
+
+```ts
+nestedDocsBrowser({ collection: 'taxa', levelField: 'rank', /* … */ })
+```
+
+Then say which levels show:
+
+```tsx
+<NestedDocsBrowser
+  data={data}
+  noun="species"
+  crumbs={{
+    leading: [{ name: 'Taxonomy', href: '/taxonomy' }],
+    keep: { levels: ['class', 'order', 'family', 'genus'] },
+    narrow: { levels: ['family', 'genus'] },
+    structuredData: { origin: 'https://example.org' },
+  }}
+/>
+```
+
+A red-footed tortoise's page then reads `Taxonomy / Eukaryota / … / Reptilia / Testudines / … / Testudinidae / Chelonoidis`, and on a phone `Taxonomy / Eukaryota / … / Testudinidae / Chelonoidis`.
+
+- **Which levels show.** `keep` takes any of `levels` (by the level's value, case ignored), `first` and `last` (by position), and `test` (your own function). A level shows when any of them matches. Without `keep`, every level shows, as before.
+- **Always shown:** the `leading` index pages, the first real level of the tree and the current page.
+- **Folding.** Neighboring hidden levels share one **…**. A single hidden level between two shown ones is shown, since a button would save nothing. `mode: 'hide'` leaves hidden levels out with no marker.
+- **Opening the …** `open: 'popover'` (default) opens a list of links on click or tap. `'expand'` puts the levels back in place and moves focus to the first one. `'hover'` opens on mouse hover, with tap and keyboard as the fallback.
+- **Keyboard and screen readers.** The … is a real button named "Show 2 hidden levels", with `aria-expanded`. Escape or a click outside closes the list and puts focus back on the button.
+- **Small screens.** `narrow` is a second rule. The default stylesheet switches to it at 40rem and under. Unstyled, both trails render with `data-crumbs="wide"` and `"narrow"`, and the site shows one.
+- **Structured data.** `structuredData` writes a schema.org `BreadcrumbList` with every level, hidden ones and the current page included. Pass `origin` to make links absolute.
+
+`Breadcrumbs` works on its own too, outside the browser, for any page with a trail (pass `crumbs`, `indexPages` and `current`). The plan itself is plain TypeScript in `…/core`: `planCrumbs`, `breadcrumbJsonLd`.
+
 ## Styling
 
 **Icons and silhouettes.** For a one-color SVG icon, return `{ image, imageAlt, imageMask: true }` from `describe`. The browser draws it as a mask in `--ndb-color-image`, so it takes the theme's color in light and dark. With `imageAlt` ("No photo yet (tortoise)") it's announced; without it, it's decorative. `unstyled` shows it as a plain picture.

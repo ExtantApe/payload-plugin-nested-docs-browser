@@ -149,3 +149,5 @@ export function showingLine(p: Presented, noun: string): string {
   const of = p.first.length + p.rest.length
   return of > shown ? `Showing the ${shown} largest of ${of} ${noun}` : `${of} ${noun}`
 }
+
+export { breadcrumbJsonLd, crumbShown, jsonLdText, planCrumbs, type Crumb, type CrumbKeep, type CrumbOptions, type CrumbPart } from './crumbs.js'

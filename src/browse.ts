@@ -45,6 +45,9 @@ const describe = (o: BrowserOptions, doc: Lean): Described => {
   return { name: d.name ?? String(doc[o.labelField ?? 'name'] ?? ''), everyday: d.everyday ?? null, image: d.image ?? null, imageAlt: d.imageAlt ?? null, imageMask: Boolean(d.imageMask) }
 }
 
+/** The level's kind (for a taxonomy: its rank), for collapsible breadcrumbs. Left out when `levelField` isn't set. */
+const levelOf = (o: BrowserOptions, doc: Lean): { level?: unknown } => (o.levelField ? { level: doc[o.levelField] ?? null } : {})
+
 const hides = (o: BrowserOptions) => Boolean(o.hideByDefault && ('notEquals' in o.hideByDefault || 'equals' in o.hideByDefault))
 /** Is a document hidden by default? With `notEquals`, anything without the value (missing included) is hidden. */
 const isHidden = (o: BrowserOptions, doc: Lean) => {
@@ -119,8 +122,9 @@ async function childrenUnder(payload: Payload, o: BrowserOptions, root: string, 
 }
 
 export type BrowseResult = {
-  node: { path: string; name: string; everyday: string | null; image: string | null } | null
-  ancestors: { path: string; name: string; everyday: string | null; href: string | null }[]
+  node: { path: string; name: string; everyday: string | null; image: string | null; level?: unknown } | null
+  /** From the top of the tree down to the node's parent. Each carries `level` when `levelField` is set. */
+  ancestors: { path: string; name: string; everyday: string | null; href: string | null; level?: unknown }[]
   children: Child[]
 }
 
@@ -137,12 +141,12 @@ export function browse(payload: Payload, o: BrowserOptions, path: string): Promi
     const self = clean ? byPath.get(clean) : undefined
     if (clean && !self) return { node: null, ancestors: [], children: [] }
     return {
-      node: self ? { path: clean, ...describe(o, self) } : { path: '', name: o.rootLabel ?? 'All', everyday: null, image: null },
+      node: self ? { path: clean, ...describe(o, self), ...levelOf(o, self) } : { path: '', name: o.rootLabel ?? 'All', everyday: null, image: null },
       ancestors: prefixes.slice(0, -1).flatMap((p) => {
         const d = byPath.get(p)
         if (!d) return []
         const { name, everyday, image } = describe(o, d)
-        return [{ path: p, name, everyday, image, href: o.href ? o.href(p) : null }]
+        return [{ path: p, name, everyday, image, href: o.href ? o.href(p) : null, ...levelOf(o, d) }]
       }),
       children: await childrenUnder(payload, o, clean),
     }

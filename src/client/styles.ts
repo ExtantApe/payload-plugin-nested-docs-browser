@@ -59,6 +59,19 @@ ${vars}
 :where(.ndb__crumbs-list) { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
 :where(.ndb__crumb) { display: inline-flex; gap: 6px; align-items: center; }
 :where(.ndb__crumb-link) { display: inline-flex; min-height: var(--ndb-target); align-items: center; }
+:where(.ndb__crumb-current) { color: var(--ndb-color-text); }
+:where(.ndb__crumb-more) { position: relative; }
+:where(.ndb__crumb-more-button) { min-width: var(--ndb-target); min-height: var(--ndb-target); padding: 0 8px; border: 1px solid var(--ndb-color-line); border-radius: var(--ndb-radius-control); background: var(--ndb-color-card); font: inherit; color: inherit; cursor: pointer; }
+:where(.ndb__crumb-more-button[aria-expanded="true"]) { border-color: var(--ndb-color-accent); }
+:where(.ndb__crumb-popover) { position: absolute; z-index: 10; top: 100%; left: 0; min-width: 12rem; max-width: min(20rem, 90vw); margin: 4px 0 0; padding: 6px 0; list-style: none; border: 1px solid var(--ndb-color-line); border-radius: 12px; background: var(--ndb-color-card); box-shadow: 0 6px 20px rgb(0 0 0 / .12); }
+:where(.ndb__crumb-popover-link) { display: flex; align-items: center; min-height: var(--ndb-target); padding: 0 14px; }
+:where(.ndb__crumb-popover-link:hover) { background: var(--ndb-color-card-hover); }
+/* Two trails when a narrow rule is set: one class of weight, so a site's bare ol rule can't show both. */
+.ndb__crumbs > :where([data-crumbs="narrow"]) { display: none; }
+@media (max-width: 40rem) {
+  .ndb__crumbs > :where([data-crumbs="wide"]) { display: none; }
+  .ndb__crumbs > :where([data-crumbs="narrow"]) { display: flex; }
+}
 :where(.ndb__title) { margin: 4px 0 6px; }
 :where(.ndb__system-name) { color: var(--ndb-color-muted); font-style: italic; margin: 0; }
 :where(.ndb__summary) { color: var(--ndb-color-muted); margin: 6px 0 0; }
