@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-15)
 
 - **Collapsible breadcrumbs.** Pick which levels show by value (`keep.levels`), position (`first`, `last`) or your own function, and fold the rest into one … button, or leave them out with `mode: 'hide'`. The … opens a popover of links by default, or expands in place, or opens on hover. It is a real button with a count in its name and `aria-expanded`, and Escape returns focus to it. A `narrow` rule gives small screens a shorter trail. `structuredData` writes the full path as schema.org `BreadcrumbList`. Without these settings the trail looks as it did.
 - **`levelField`** sends each ancestor's level (for a taxonomy, its rank) with `browse()` and the endpoint, so breadcrumbs can choose by value.
