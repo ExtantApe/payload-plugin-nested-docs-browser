@@ -1,8 +1,8 @@
 'use client'
 
-import { useId, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 
-import { chooseLayout, letterIndex, leavesOf, presentChildren, type Child, type Layout, type Thresholds } from '../core/index.js'
+import { breadcrumbJsonLd, chooseLayout, jsonLdText, letterIndex, leavesOf, planCrumbs, presentChildren, type Child, type Crumb, type CrumbKeep, type Layout, type Thresholds } from '../core/index.js'
 import { NDB_STYLES } from './styles.js'
 
 /** Every word the browser shows, so a site can translate them. `{n}`, `{of}` and `{noun}` are filled in. */
@@ -23,6 +23,8 @@ export const DEFAULT_TEXT = {
   includeHidden: 'Include fossils',
   hiddenNote: '{n} more {leaves} are hidden; include them with the switch.',
   where: 'Where you are',
+  crumbsMore: 'Show {n} hidden levels',
+  crumbsHidden: 'Hidden levels',
   letters: 'Jump to a letter',
   lettersFor: 'Starting with {letter}: {n}',
   nothing: 'Nothing here yet.',
@@ -34,14 +36,15 @@ const fmt = (n: number) => new Intl.NumberFormat().format(n)
 
 /** Every element that can be styled, by slot name. Pass `classNames` to add your own classes to any of them. */
 export type Slot =
-  | 'root' | 'crumbs' | 'crumbsList' | 'crumb' | 'crumbLink' | 'title' | 'systemName' | 'summary' | 'switch' | 'switchInput' | 'switchCount'
+  | 'root' | 'crumbs' | 'crumbsList' | 'crumb' | 'crumbLink' | 'crumbCurrent' | 'crumbMore' | 'crumbMoreButton' | 'crumbPopover' | 'crumbPopoverLink' | 'title' | 'systemName' | 'summary' | 'switch' | 'switchInput' | 'switchCount'
   | 'showing' | 'grid' | 'card' | 'cardImage' | 'cardName' | 'cardSystemName' | 'cardCount' | 'cardBar' | 'cardBarFill'
   | 'button' | 'showAll' | 'showAllButton' | 'compact' | 'compactTools' | 'compactSort' | 'compactList' | 'compactRow' | 'compactName' | 'compactCount'
   | 'compactEmpty' | 'compactEmptySummary' | 'letters' | 'lettersButton' | 'lettersCount' | 'section' | 'sectionTitle' | 'sectionCount' | 'sectionImage' | 'nothing'
 export type ClassNames = Partial<Record<Slot, string>>
 
 const BASE: Record<Slot, string> = {
-  root: 'ndb', crumbs: 'ndb__crumbs', crumbsList: 'ndb__crumbs-list', crumb: 'ndb__crumb', crumbLink: 'ndb__crumb-link', title: 'ndb__title',
+  root: 'ndb', crumbs: 'ndb__crumbs', crumbsList: 'ndb__crumbs-list', crumb: 'ndb__crumb', crumbLink: 'ndb__crumb-link', crumbCurrent: 'ndb__crumb-current',
+  crumbMore: 'ndb__crumb-more', crumbMoreButton: 'ndb__crumb-more-button', crumbPopover: 'ndb__crumb-popover', crumbPopoverLink: 'ndb__crumb-popover-link', title: 'ndb__title',
   systemName: 'ndb__system-name', summary: 'ndb__summary', switch: 'ndb__switch', switchInput: 'ndb__switch-input', switchCount: 'ndb__switch-count',
   showing: 'ndb__showing', grid: 'ndb__grid', card: 'ndb-card', cardImage: 'ndb-card__image', cardName: 'ndb-card__name', cardSystemName: 'ndb-card__system-name',
   cardCount: 'ndb-card__count', cardBar: 'ndb-card__bar', cardBarFill: 'ndb-card__bar-fill', button: 'ndb-button', showAll: 'ndb-showall', showAllButton: 'ndb-showall__button',
@@ -195,9 +198,184 @@ export function ShowAll({ items, empty, noun, text: textIn, Link, showHidden, la
   )
 }
 
+/** How a folded "…" opens: a popover on click or tap (default), in place, or on hover with tap as the fallback. */
+export type CrumbOpen = 'popover' | 'expand' | 'hover'
+
+/** Collapsible breadcrumb settings, shared by `Breadcrumbs` and the browser's `crumbs` prop. */
+export type CrumbSettings = {
+  /** `collapse` (default) folds hidden levels into one "…"; `hide` leaves them out with no marker. */
+  mode?: 'collapse' | 'hide'
+  /** Which levels show. Without it, every level shows. Index pages, the first real level and the current page always show. */
+  keep?: CrumbKeep
+  /** A shorter rule for small screens (40rem and under, in the default stylesheet). */
+  narrow?: CrumbKeep
+  open?: CrumbOpen
+  /** Write the full path as schema.org BreadcrumbList JSON-LD. Pass `{ origin }` to make links absolute. */
+  structuredData?: boolean | { origin?: string }
+}
+
+type CrumbItem = { crumb: Crumb; index: number }
+
+const crumbLabel = (c: Crumb) => c.everyday || c.name
+
+/** One folded run of levels: a real button that opens the hidden levels as links. */
+function MoreCrumbs({ items, open: how, text, Link, cx }: { items: CrumbItem[]; open: CrumbOpen; text: BrowserText; Link: LinkLike; cx: Cx }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  const box = useRef<HTMLLIElement>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const firstRevealed = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open || how === 'expand') return
+    const away = (e: Event) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
+    }
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false)
+        button.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('focusin', away)
+    document.addEventListener('keydown', key)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('focusin', away)
+      document.removeEventListener('keydown', key)
+    }
+  }, [open, how])
+  // Opening in place removes the button, so move focus to the first level it revealed.
+  useEffect(() => {
+    if (open && how === 'expand') firstRevealed.current?.querySelector<HTMLElement>('a, [tabindex]')?.focus()
+  }, [open, how])
+
+  if (how === 'expand' && open) {
+    return (
+      <>
+        {items.map(({ crumb, index }, i) => (
+          <li key={index} className={cx('crumb')}>
+            <span aria-hidden="true">›</span>
+            <span ref={i === 0 ? firstRevealed : undefined} style={{ display: 'contents' }}>
+              {crumb.href ? (
+                <Link href={crumb.href} className={cx('crumbLink')}>
+                  {crumbLabel(crumb)}
+                </Link>
+              ) : (
+                <span tabIndex={-1}>{crumbLabel(crumb)}</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </>
+    )
+  }
+  const label = fill(text.crumbsMore, { n: fmt(items.length) })
+  const hover = how === 'hover' ? { onPointerEnter: (e: { pointerType: string }) => e.pointerType === 'mouse' && setOpen(true), onPointerLeave: (e: { pointerType: string }) => e.pointerType === 'mouse' && setOpen(false) } : {}
+  return (
+    <li ref={box} className={cx('crumb', cx('crumbMore'))} data-open={open ? '' : undefined} {...hover}>
+      <span aria-hidden="true">›</span>
+      <button ref={button} type="button" aria-expanded={open} aria-controls={how === 'expand' ? undefined : id} aria-label={label} title={label} onClick={() => setOpen((o) => !o)} className={cx('crumbMoreButton')}>
+        …
+      </button>
+      {how === 'expand' ? null : (
+        <ul id={id} hidden={!open} aria-label={text.crumbsHidden} className={cx('crumbPopover')}>
+          {items.map(({ crumb, index }) => (
+            <li key={index}>
+              {crumb.href ? (
+                <Link href={crumb.href} className={cx('crumbPopoverLink')}>
+                  {crumbLabel(crumb)}
+                </Link>
+              ) : (
+                crumbLabel(crumb)
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+function CrumbTrail({ crumbs, keep, mode, indexPages, endsWithCurrent, open, text, Link, cx, media }: { crumbs: Crumb[]; keep?: CrumbKeep; mode?: 'collapse' | 'hide'; indexPages: number; endsWithCurrent: boolean; open: CrumbOpen; text: BrowserText; Link: LinkLike; cx: Cx; media?: 'wide' | 'narrow' }) {
+  const parts = planCrumbs(crumbs, { keep, mode, indexPages, endsWithCurrent })
+  return (
+    <ol className={cx('crumbsList')} data-crumbs={media}>
+      {parts.map((part, i) => {
+        if (part.kind === 'more') return <MoreCrumbs key={`more-${part.crumbs[0]!.index}`} items={part.crumbs} open={open} text={text} Link={Link} cx={cx} />
+        const { crumb, index } = part
+        const current = endsWithCurrent && index === crumbs.length - 1
+        return (
+          <li key={index} className={cx('crumb')}>
+            {i > 0 ? <span aria-hidden="true">›</span> : null}
+            {current ? (
+              <span aria-current="page" className={cx('crumbCurrent')}>
+                {crumbLabel(crumb)}
+              </span>
+            ) : crumb.href ? (
+              <Link href={crumb.href} className={cx('crumbLink')}>
+                {crumbLabel(crumb)}
+              </Link>
+            ) : (
+              crumbLabel(crumb)
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+export type BreadcrumbsProps = CrumbSettings & {
+  /** The trail from the top down, index pages first. */
+  crumbs: Crumb[]
+  /** How many crumbs at the start are index pages rather than levels (a "Taxonomy" home page). Default 0. */
+  indexPages?: number
+  /** The page being shown. Always drawn last, as the current page, unless `showCurrent` is false (when a heading names it). */
+  current?: Crumb | null
+  showCurrent?: boolean
+  text?: Partial<BrowserText>
+  Link?: LinkLike
+  classNames?: ClassNames
+  unstyled?: boolean
+  /** Render the default stylesheet here (default true unless unstyled). Leave false inside a page that already has it. */
+  includeStyles?: boolean
+  nonce?: string
+}
+
+/**
+ * Breadcrumbs that fold the levels you don't need into one "…" button, or leave them out. Nothing is removed
+ * from the data: the button lists every hidden level, and the structured data keeps the full path.
+ */
+export function Breadcrumbs({ crumbs, indexPages = 0, current, showCurrent = true, mode, keep, narrow, open = 'popover', structuredData, text: textIn, Link: LinkIn, classNames, unstyled = false, includeStyles, nonce, embedded = false }: BreadcrumbsProps & { embedded?: boolean }) {
+  const text = { ...DEFAULT_TEXT, ...textIn }
+  const Link = LinkIn ?? DefaultLink
+  const cx = makeCx(classNames, unstyled)
+  const drawCurrent = Boolean(current && showCurrent)
+  const trail = drawCurrent ? [...crumbs, current!] : crumbs
+  const full = current ? [...crumbs, current] : crumbs
+  const common = { crumbs: trail, mode, indexPages, endsWithCurrent: drawCurrent, open, text, Link, cx }
+  const ld = structuredData ? breadcrumbJsonLd(full, typeof structuredData === 'object' ? structuredData : {}) : null
+  if (!trail.length) return null
+  return (
+    <nav aria-label={text.where} className={embedded ? cx('crumbs') : cx('root', cx('crumbs'))}>
+      {!embedded && (includeStyles ?? !unstyled) ? <NestedDocsBrowserStyles nonce={nonce} /> : null}
+      {narrow ? (
+        <>
+          <CrumbTrail {...common} keep={keep} media="wide" />
+          <CrumbTrail {...common} keep={narrow} media="narrow" />
+        </>
+      ) : (
+        <CrumbTrail {...common} keep={keep} />
+      )}
+      {ld ? <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: jsonLdText(ld) }} /> : null}
+    </nav>
+  )
+}
+
 export type BrowserProps = {
   /** From the browse endpoint or `browse()`: the level to show. */
-  data: { node: { name: string; everyday?: string | null; path: string } | null; ancestors: { name: string; everyday?: string | null; href: string | null }[]; children: Child[] }
+  data: { node: { name: string; everyday?: string | null; path: string; level?: unknown } | null; ancestors: { name: string; everyday?: string | null; href: string | null; level?: unknown }[]; children: Child[] }
   /** The word for this level's children ("families", "genera"). */
   noun: string
   text?: Partial<BrowserText>
@@ -206,6 +384,11 @@ export type BrowserProps = {
   sections?: { id: string; title: string; image?: string | null; imageAlt?: string | null; imageMask?: boolean; paths: string[] }[]
   /** The site's link component (for example Next's), so links keep the site's routing. */
   Link?: LinkLike
+  /**
+   * Collapsible breadcrumbs. `leading` are index pages put before the tree (a "Taxonomy" home page). Without
+   * `keep`, every level shows, as before.
+   */
+  crumbs?: CrumbSettings & { leading?: Crumb[] }
   /** Force a layout (otherwise it's chosen from the counts). */
   layout?: Layout
   /** Heading level for the node's name. */
@@ -229,7 +412,7 @@ export type BrowserProps = {
  * and sizes are `--ndb-*` variables that fall back to `--palette-*` theme tokens. `classNames` adds classes
  * per element; `unstyled` leaves everything to the site.
  */
-export function NestedDocsBrowser({ data, noun, text: textIn, thresholds, sections, Link: LinkIn, layout: forced, headingLevel = 1, classNames, unstyled = false, includeStyles, nonce }: BrowserProps) {
+export function NestedDocsBrowser({ data, noun, text: textIn, thresholds, sections, Link: LinkIn, crumbs, layout: forced, headingLevel = 1, classNames, unstyled = false, includeStyles, nonce }: BrowserProps) {
   const text = { ...DEFAULT_TEXT, ...textIn }
   const Link = LinkIn ?? DefaultLink
   const cx = makeCx(classNames, unstyled)
@@ -256,23 +439,19 @@ export function NestedDocsBrowser({ data, noun, text: textIn, thresholds, sectio
   return (
     <section className={cx('root')} data-layout={layout} data-show-hidden={showHidden ? '' : undefined}>
       {(includeStyles ?? !unstyled) ? <NestedDocsBrowserStyles nonce={nonce} /> : null}
-      {data.ancestors.length ? (
-        <nav aria-label={text.where} className={cx('crumbs')}>
-          <ol className={cx('crumbsList')}>
-            {data.ancestors.map((a, i) => (
-              <li key={i} className={cx('crumb')}>
-                {i > 0 ? <span aria-hidden="true">›</span> : null}
-                {a.href ? (
-                  <Link href={a.href} className={cx('crumbLink')}>
-                    {a.everyday || a.name}
-                  </Link>
-                ) : (
-                  a.everyday || a.name
-                )}
-              </li>
-            ))}
-          </ol>
-        </nav>
+      {(crumbs?.leading?.length ?? 0) + data.ancestors.length ? (
+        <Breadcrumbs
+          {...crumbs}
+          embedded
+          crumbs={[...(crumbs?.leading ?? []), ...data.ancestors]}
+          indexPages={crumbs?.leading?.length ?? 0}
+          current={data.node ? { name: data.node.name, everyday: data.node.everyday ?? null, href: null, level: data.node.level } : null}
+          showCurrent={false}
+          text={text}
+          Link={Link}
+          classNames={classNames}
+          unstyled={unstyled}
+        />
       ) : null}
       {data.node ? (
         <>

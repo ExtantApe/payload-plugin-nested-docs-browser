@@ -12,6 +12,11 @@ export type BrowserOptions = {
   pathField?: string
   /** Field naming each document (used when `describe` doesn't). Default `name`. */
   labelField?: string
+  /**
+   * Field naming what kind of level each document is (for a taxonomy: `rank`). Sent as `level` on the node and
+   * every ancestor, so breadcrumbs can choose which levels to show by value.
+   */
+  levelField?: string
   /** What counts as a leaf (for a taxonomy: `{ field: 'rank', equals: 'species' }`). */
   leaf: { field: string; equals: unknown }
   /**

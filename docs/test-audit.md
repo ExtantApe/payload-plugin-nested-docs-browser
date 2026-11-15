@@ -2,6 +2,25 @@
 
 Newest first.
 
+## 2026-11-15: collapsible breadcrumbs
+
+Suite: 29 tests before, 49 after (`npx vitest run`).
+
+| Promise | Test |
+| --- | --- |
+| The agreed reading for the first site (index page, first real level, class, order, family, genus) and the phone rule | crumbs: "reads the way the site config was agreed…", "a shorter rule for phones…" |
+| Nothing lost: every level is drawn once or sits in exactly one fold | crumbs: "never loses a level" |
+| A one-level gap shows that level; hide mode draws no marker | crumbs: "a gap of exactly one level…", "hide mode…" |
+| Rules by position, by function, by value without regard to case; current page always shows; no rule means no change | crumbs: four tests |
+| Structured data: full path in order, absolute links, a name can't close the script tag | crumbs: two tests |
+| The … is a real button named with its count, with aria-expanded; the popover lists the hidden links; Escape returns focus; a click outside closes; expand moves focus to the first revealed level | crumbs-client: five tests |
+| Narrow trail rendered and hidden by the stylesheet on wide screens; JSON-LD includes hidden levels and the current page | crumbs-client: two tests |
+| Inside the browser: leading index page and folding; unchanged without settings | crumbs-client: "the browser with collapsible breadcrumbs…" |
+| `levelField` puts `level` on the node and every ancestor, and nothing extra without it | plugin: "levels for collapsible breadcrumbs" |
+
+- **Gaps.** Not yet tried in a real browser: the popover's position, hover opening and the 40rem switch are checked only in jsdom. No screen reader run.
+- **Skipped.** Re-testing React's event handling.
+
 ## 2026-11-11: only an exact `true`, or a query that is applied
 
 Suite: 27 tests before, 29 after (`npx vitest run`; `plugin.test.ts` against real Payload 3.92 and in-memory MongoDB). From an access sweep.

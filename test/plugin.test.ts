@@ -259,3 +259,20 @@ describe('only an exact true, or a query that is applied', () => {
     expect(all.none).toEqual(['reptilia/squamata/dibamidae/dibamus/novaeguineae'])
   })
 })
+
+describe('levels for collapsible breadcrumbs', () => {
+  it('sends each ancestor and the node with its level when levelField is set, and nothing extra when it is not', async () => {
+    clearBrowseCache()
+    const r = await browse(payload, { ...opts, levelField: 'rank' }, 'reptilia/testudines/testudinidae/chelonoidis')
+    expect(r.ancestors.map((a) => [a.name, a.level])).toEqual([
+      ['Reptilia', 'class'],
+      ['Testudines', 'order'],
+      ['Testudinidae', 'family'],
+    ])
+    expect(r.node).toMatchObject({ name: 'Chelonoidis', level: 'genus' })
+    clearBrowseCache()
+    const plain = await browse(payload, opts, 'reptilia/testudines')
+    expect(plain.ancestors[0]).not.toHaveProperty('level')
+    clearBrowseCache()
+  })
+})
